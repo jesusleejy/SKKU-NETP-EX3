@@ -9,79 +9,82 @@
 
 using namespace ns3;
 
-NS_LOG_COMPONENT_DEFINE ("Exer3");
-int
-main (int argc, char *argv[])
-{
-  /* Enable logging for UdpClient and UdpServer */
-  LogComponentEnable ("UdpClient", LOG_LEVEL_INFO);
-  LogComponentEnable ("UdpServer", LOG_LEVEL_INFO);
+NS_LOG_COMPONENT_DEFINE("Exer3");
 
-  CommandLine cmd;
-  cmd.Parse (argc, argv);
- 
-  /* Create a node container */
-  NodeContainer node;
-  /* Todo:  Create 2 nodes of p2p link*/
+PointToPointHelper* CreatePointToPointHelper(NodeContainer nodes, std::string dataRate, std::string delay) {
+    PointToPointHelper *pointToPoint_p =  new PointToPointHelper;
+    pointToPoint_p->SetDeviceAttribute("DataRate", StringValue(dataRate));
+    pointToPoint_p->SetChannelAttribute("Delay", StringValue(delay));
+    return pointToPoint_p;
+}
 
+Ipv4InterfaceContainer CreateIpv4InterfaceContainer(NetDeviceContainer devices, Ipv4Address network, Ipv4Mask mask) {
+    Ipv4AddressHelper *address_p = new Ipv4AddressHelper;
+    address_p->SetBase(network, mask);
+    return address_p->Assign(devices);
+}
 
-  /* Create a point-to-point link */
-  PointToPointHelper p2p;
-  /* Todo:   Set datarate and delay for p2p link*/
- 
-  /* Create a netdevice container */
-  NetDeviceContainer netdev;
-  
-  /* Todo:
-  Make a p2p link between two nodes in the node container  
-  		using "NetDeviceContainer", "PointToPointHelper", and "nodecontainer"*/
+UdpServerHelper* CreateUdpServerHelper(uint16_t port) {
+    return new UdpServerHelper(port);
+}
 
- 
-  /* Install a protocol stack on nodes */
-  InternetStackHelper internet;
-  internet.Install (node);
-  
-  /* Allocate IP addresses */
-  Ipv4AddressHelper ipv4;
-  Ipv4InterfaceContainer p2pInterfaces;
+UdpClientHelper* CreateUdpClientHelper(Address destIp, uint16_t port, uint32_t maxPackets, uint32_t packetSize, Time interval) {
+    UdpClientHelper *echoClient_p = new UdpClientHelper(destIp, port);
+    echoClient_p->SetAttribute("MaxPackets", UintegerValue(maxPackets));
+    echoClient_p->SetAttribute("PacketSize", UintegerValue(packetSize));
+    echoClient_p->SetAttribute("Interval", TimeValue(interval));
+    return echoClient_p;
+}
 
-  /* Todo: allocate IP addresses on netdevicecontainer
-           1) set the base address of IP address to be allocated
-   		using "SetBase" method of Ipv4AddressHelper 'ipv4',
-		   base address "10.1.1.0", and subnet mask "255.255.255.0")
-           2) allocate IP address on netdevicecontainer using "Assign" method of Ipv4AddressHelper and Ipv4InterfaceContainer */
+int main(int argc, char *argv[]) {
+    /* Enable logging for UdpClient and UdpServer */
+    LogComponentEnable("UdpClient", LOG_LEVEL_INFO);
+    LogComponentEnable("UdpServer", LOG_LEVEL_INFO);
 
+    /* Get command line arguments */
+    CommandLine cmd;
+    cmd.Parse(argc, argv);
 
-  /* Create udpServer application */
-  uint16_t port = 9;
-  UdpServerHelper server (port);
-  ApplicationContainer apps;
+    /* Create a node container */
+    NodeContainer nodes;
+    nodes.Create(2);
 
-  /* Todo: Install UdpServerHelper 'server' on "node1"
-   		using ApplicationContainer 'apps', and "install" method of UdpServerHelper 'server'*/
+    /* Create a point to point */
+    PointToPointHelper *pointToPoint_p = CreatePointToPointHelper(nodes, "5Mbps", "10us");
 
-  /* Todo:  Start the server application from 0 to 10 sec */
+    /* Create a netdevice container */
+    NetDeviceContainer netDevices = pointToPoint_p->Install(nodes);
 
+    /* Install a protocol stack on nodes */
+    InternetStackHelper internetStack;
+    internetStack.Install(nodes);
 
-  /* Create a UdpClient application to send UDP datagrams from node0 to node1 */
-  /* Todo: Create a UdpClient using "UdpClientHelper" class 
-               hint) 
-	          1) UdpClientHelper client (server IP address, server port number); 
-		  2) Get server IP from Ipv4InterfaceContainer "p2pInterfaces"*/
+    /* Allocate IP addresses */
+    Ipv4InterfaceContainer interfaces = CreateIpv4InterfaceContainer(netDevices, "10.1.1.0", "255.255.255.0");
 
+    /* Create udpServer application */
+    uint16_t port = 9;
 
-  /* Set maximum number of packets the application will send */
-  uint32_t maxPacketCount = 100000; // underlying type of MaxPackets: uint32_t
-  client.SetAttribute ("MaxPackets", UintegerValue (maxPacketCount));
+    ApplicationContainer serverApps;
+    serverApps.Add(CreateUdpServerHelper(port)->Install(nodes.Get(1)));
+    serverApps.Start(Seconds(0));
+    serverApps.Stop(Seconds(10));
 
-  /* Todo: Set packet interval as 'Seconds (0.0025)' and packetsize as 1500 -> about 5Mbps*/
- 
-  /* Todo:  Start the client application from 1 to 10 sec */
+    /* Create a UdpClient application to send UDP datagrams from node0 to node1 */
+    Address serverIp = interfaces.GetAddress(1);
+    uint32_t maxPacketCount = 100000;
+    uint32_t packetSize = 1500;
+    Time interval = Seconds(0.0025);
 
-  /* Enable pcap tracing */
-  p2p.EnablePcapAll("exer3_pcap");
+    ApplicationContainer clientApps;
+    clientApps.Add(CreateUdpClientHelper(serverIp, port, maxPacketCount, packetSize, interval)->Install(nodes.Get(0)));
+    clientApps.Start(Seconds(1));
+    clientApps.Stop(Seconds(10));
 
-  /* Running a simulator */
-  Simulator::Run ();
-  Simulator::Destroy ();
+    /* Enable pcap tracing */
+    pointToPoint_p->EnablePcapAll("Exercise3");
+
+    /* Running a simulator */
+    Simulator::Run();
+    Simulator::Destroy();
 }
